@@ -1,0 +1,85 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum SentimentState {
+  HOT
+  INTERESTED
+  FRUSTRATED
+  NEUTRAL
+}
+
+enum MessageSender {
+  LEAD
+  BOT
+  HUMAN_AGENT
+}
+
+enum ParticipantCategory {
+  STUDENT_UTA    // $40 - Requiere certificado de matrícula o carnet UTA
+  TEACHER_UTA    // $50 - Requiere acreditación / carnet docente UTA
+  GENERAL_PUBLIC // $60 - No requiere certificado académico
+}
+
+enum EnrollmentStatus {
+  PENDING_VERIFICATION // Pendiente de comprobación manual por el asesor
+  APPROVED             // Comprobante y certificado válidos
+  REJECTED             // Comprobante no coincide o certificado inválido
+}
+
+model Lead {
+  id                 String         @id @default(uuid())
+  chatId             String         @unique
+  name               String?
+  sentimentState     SentimentState @default(NEUTRAL)
+  isHumanIntervening Boolean        @default(false)
+  messages           Message[]
+  enrollments        Enrollment[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([chatId])
+}
+
+model Message {
+  id        String        @id @default(uuid())
+  leadId    String
+  lead      Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  sender    MessageSender
+  text      String
+  mediaUrl  String?       @db.Text
+  mediaType String?
+  createdAt DateTime      @default(now())
+
+  @@index([leadId])
+}
+
+model Enrollment {
+  id              String              @id @default(uuid())
+  leadId          String?
+  lead            Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  buyerName       String
+  identification  String              // Cédula o DNI
+  email           String?
+  phone           String?
+  courseId        String              // gh-600, arduino, python
+  courseName      String
+  category        ParticipantCategory @default(STUDENT_UTA)
+  amount          Float
+  paymentProofUrl String?             @db.Text
+  academicCertUrl String?             @db.Text // Certificado de matrícula (estudiante) o carnet docente
+  status          EnrollmentStatus    @default(PENDING_VERIFICATION)
+  verifiedBy      String?             // Asesor o secretaría que comprobó
+  notes           String?             // Observaciones de comprobación manual
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([leadId])
+  @@index([status])
+  @@index([category])
+}

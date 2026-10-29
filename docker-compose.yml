@@ -1,0 +1,60 @@
+services:
+  # 1. Base de Datos PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: hackaton-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-hackaton_sales}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hackaton_sales"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  # 2. Backend NestJS (Conecta al Ollama de tu PC host o a Gemini API)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hackaton-backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-hackaton_sales}?schema=public
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+
+  # 3. Dashboard Operador Next.js (React 19 + Tailwind)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hackaton-frontend
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/app:/app/app
+
+volumes:
+  postgres_data:
